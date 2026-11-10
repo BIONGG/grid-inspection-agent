@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>网格巡查记录智能分析 Agent</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js 数据可视化库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Tailwind 配置扩展 -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    },
+                    borderRadius: {
+                        'xl': '1rem',
+                        '2xl': '1.5rem',
+                        '3xl': '2rem',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .animate-pop-in { animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .app-container {
+            max-width: 480px;
+            min-height: 100vh;
+            margin: 0 auto;
+            position: relative;
+            background-color: inherit;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 min-h-screen flex justify-center selection:bg-blue-500 selection:text-white">
+
+    <!-- 小程序外壳 -->
+    <div class="app-container w-full bg-slate-50 dark:bg-gray-950 flex flex-col shadow-2xl relative overflow-hidden pb-20">
+        
+        <!-- 顶部导航栏 -->
+        <header class="sticky top-0 z-30 bg-slate-50/80 dark:bg-gray-950/80 backdrop-blur-md px-5 pt-4 pb-3 flex justify-between items-center border-b border-gray-200/50 dark:border-gray-800/50">
+            <div>
+                <div class="flex items-center gap-1.5">
+                    <span class="px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-bold">巡查分析赛道 · 一等奖备选</span>
+                </div>
+                <h1 class="text-lg font-extrabold text-gray-900 dark:text-white mt-1">
+                    网格巡查智能分析 Agent
+                </h1>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <!-- 暗黑模式切换 -->
+                <button id="theme-toggle-btn" class="w-9 h-9 rounded-full bg-gray-200/70 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition">
+                    <i class="fa-solid fa-moon text-sm dark:hidden"></i>
+                    <i class="fa-solid fa-sun text-sm hidden dark:block text-amber-400"></i>
+                </button>
+                <!-- 智能报告一键生成 -->
+                <button onclick="openReportModal()" class="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 transition" title="一等奖路演材料生成">
+                    <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 业务功能板块轮播 -->
+        <div class="px-5 pt-3 pb-2">
+            <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" id="module-pills-container">
+                <!-- 由 JS 动态渲染 -->
+            </div>
+        </div>
+
+        <!-- 主体视图区 -->
+        <main id="main-content-area" class="flex-1 px-5 pt-2 flex flex-col gap-3 overflow-y-auto pb-10">
+            <!-- 动态渲染对应业务模块 -->
+        </main>
+
+        <!-- 底部 Tabbar -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-t border-gray-200/60 dark:border-gray-800/60 px-6 py-2 flex justify-around z-10">
+            <button onclick="switchTab('workbench')" id="tab-workbench" class="flex flex-col items-center text-blue-600 dark:text-blue-400">
+                <i class="fa-solid fa-robot text-lg"></i>
+                <span class="text-[10px] mt-0.5 font-medium">Agent 工作台</span>
+            </button>
+            <button onclick="switchTab('records')" id="tab-records" class="flex flex-col items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <i class="fa-solid fa-list-check text-lg"></i>
+                <span class="text-[10px] mt-0.5 font-medium">分析台账</span>
+            </button>
+            <button onclick="switchTab('stats')" id="tab-stats" class="flex flex-col items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <i class="fa-solid fa-chart-pie text-lg"></i>
+                <span class="text-[10px] mt-0.5 font-medium">效能看板</span>
+            </button>
+        </nav>
+
+        <!-- Modal: 一等奖路演汇报与总结生成器 -->
+        <div id="report-modal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="w-full max-w-[480px] bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl animate-pop-in max-h-[90vh] flex flex-col border border-gray-100 dark:border-gray-800">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-800">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                            <i class="fa-solid fa-trophy"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-100">网格巡查赛道一等奖申报材料生成器</h3>
+                            <p class="text-[10px] text-gray-400">一键整合大赛路演汇报及核心提效量化指标</p>
+                        </div>
+                    </div>
+                    <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600 p-1">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto py-3 space-y-3.5 pr-1">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">项目名称与申报赛道</label>
+                        <input type="text" id="rep-name" value="基于多Agent协同的网格巡查记录深度分析与隐患自动预警系统" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">（一）解决的核心业务痛点</label>
+                        <textarea id="rep-pain" rows="2" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">基层网格巡查日志海量、非结构化文本繁多、安全隐患多头滞后上报、隐患趋势难以精准预测等痛点。</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">（二）AI Agent 创新应用与实现路径</label>
+                        <textarea id="rep-tech" rows="3" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">1. 多源巡查日志 NLP 自动归类与实体提取 Agent；2. 消防与设施隐患智能识别与风险评级 Agent；3. 网格热力图与高频问题趋势预测 Agent。</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">（三）可量化提效减负成果</label>
+                        <textarea id="rep-result" rows="2" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">巡查日志分析效率提升 85%，隐患闭环流转周期缩短 60%，具备在全区各街道项目及物业现场复制推广的高价值。</textarea>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+                    <button onclick="copyReport()" class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition">
+                        <i class="fa-solid fa-copy mr-1"></i> 一键复制完整申报材料
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast 提示 -->
+        <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 dark:bg-white/90 text-white dark:text-gray-900 text-xs px-4 py-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-2">
+            提示消息
+        </div>
+    </div>
+
+    <!-- 业务逻辑脚本 -->
+    <script>
+        const STORAGE_KEY = 'grid_inspection_agent_v1';
+
+        let state = {
+            currentTab: 'workbench', // workbench, records, stats
+            activeModule: 'nlp', // nlp, hazard, trend, report
+            theme: localStorage.getItem('grid_theme') || 'light',
+            records: [
+                { id: '1', type: 'hazard', title: '隐患识别：丰台科技园区A座地下车库消防通道堆物', status: '高风险 (已自动派单)', time: '10分钟前' },
+                { id: '2', type: 'nlp', title: '日志归档：第3网格日常巡查日志 (含12条无异样记录)', status: '已结构化解析', time: '45分钟前' },
+                { id: '3', type: 'trend', title: '趋势预测：本周电气线路老化类隐患环比下降 15%', status: '已生成周报建议', time: '2小时前' }
+            ],
+            chatMessages: [
+                { sender: 'agent', text: '您好！我是网格巡查记录智能分析 Agent。请问需要分析哪条巡查日志、检索安全隐患或生成分析报告？' }
+            ]
+        };
+
+        const modules = [
+            { id: 'nlp', name: '巡查日志 NLP 分析', icon: 'fa-file-lines' },
+            { id: 'hazard', name: '隐患智能识别与分级', icon: 'fa-triangle-exclamation' },
+            { id: 'trend', name: '高频问题趋势预测', icon: 'fa-chart-line' },
+            { id: 'report', name: '巡查总结 AI 生成', icon: 'fa-wand-magic-sparkles' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            loadState();
+            renderModulePills();
+            renderMainContent();
+            bindThemeToggle();
+        });
+
+        function initTheme() {
+            if (state.theme === 'dark' || (!('grid_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                state.theme = 'dark';
+            } else {
+                document.documentElement.classList.remove('dark');
+                state.theme = 'light';
+            }
+        }
+
+        function bindThemeToggle() {
+            document.getElementById('theme-toggle-btn')?.addEventListener('click', () => {
+                state.theme = state.theme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('grid_theme', state.theme);
+                initTheme();
+            });
+        }
+
+        function loadState() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                try { state.records = JSON.parse(stored); } catch (e) {}
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+        }
+
+        window.switchTab = function(tabName) {
+            state.currentTab = tabName;
+            ['workbench', 'records', 'stats'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === tabName) {
+                    btn.className = 'flex flex-col items-center text-blue-600 dark:text-blue-400';
+                } else {
+                    btn.className = 'flex flex-col items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200';
+                }
+            });
+            renderMainContent();
+        };
+
+        window.switchModule = function(modId) {
+            state.activeModule = modId;
+            renderModulePills();
+            renderMainContent();
+        };
+
+        function renderModulePills() {
+            const container = document.getElementById('module-pills-container');
+            container.innerHTML = modules.map(m => {
+                const isActive = state.activeModule === m.id;
+                const cls = isActive 
+                    ? 'bg-blue-600 text-white font-medium shadow-sm shadow-blue-500/30' 
+                    : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-800';
+                return `
+                    <button onclick="switchModule('${m.id}')" class="px-3 py-1.5 rounded-xl text-xs whitespace-nowrap transition-all flex items-center gap-1.5 ${cls}">
+                        <i class="fa-solid ${m.icon} text-[11px]"></i>
+                        <span>${m.name}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function renderMainContent() {
+            const area = document.getElementById('main-content-area');
+            if (state.currentTab === 'workbench') {
+                if (state.activeModule === 'nlp') renderNLPModule(area);
+                else if (state.activeModule === 'hazard') renderHazardModule(area);
+                else if (state.activeModule === 'trend') renderTrendModule(area);
+                else if (state.activeModule === 'report') renderReportGenModule(area);
+            } else if (state.currentTab === 'records') {
+                renderRecordsView(area);
+            } else if (state.currentTab === 'stats') {
+                renderStatsView(area);
+            }
+        }
+
+        /**
+         * 1. 巡查日志 NLP 分析模块
+         */
+        function renderNLPModule(container) {
+            container.innerHTML = `
+                <div class="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-4 text-white shadow-lg flex justify-between items-center">
+                    <div>
+                        <span class="text-xs text-blue-100 font-medium">网格巡查日志 NLP 结构化分析 Agent</span>
+                        <h3 class="text-sm font-bold mt-0.5">自动提取巡查文本中的关键实体与隐患</h3>
+                    </div>
+                    <i class="fa-solid fa-file-lines text-2xl text-blue-200/80"></i>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-800 dark:text-gray-100">输入网格员巡查原始手记或语音转文字内容</h3>
+                    
+                    <div>
+                        <textarea id="nlp-text" rows="3" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50">今日对第3网格人才公寓进行日常巡查。发现3号楼1层公共走廊有居民堆放废旧纸箱杂物，存在消防隐患；同时2号楼北侧路灯出现频闪故障，已现场拍照记录并上报。</textarea>
+                    </div>
+
+                    <button onclick="runNLPAgent()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/25 transition">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 执行 Agent 结构化文本解析
+                    </button>
+                </div>
+
+                <div id="nlp-result-box" class="hidden bg-blue-50 dark:bg-blue-950/40 p-3.5 rounded-2xl border border-blue-200 dark:border-blue-900/50 space-y-2 animate-pop-in text-xs">
+                    <div class="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold">
+                        <i class="fa-solid fa-circle-check"></i> NLP 解析成功：已提取 2 项核心事件
+                    </div>
+                    <div class="space-y-1 text-gray-600 dark:text-gray-300">
+                        <p>📍 <b>地点：</b>第3网格人才公寓（3号楼、2号楼北侧）</p>
+                        <p>⚠️ <b>事件1：</b>消防通道堆物（消防类 · 中风险）</p>
+                        <p>💡 <b>事件2：</b>路灯频闪故障（设施类 · 低风险）</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.runNLPAgent = function() {
+            document.getElementById('nlp-result-box').classList.remove('hidden');
+            state.records.unshift({
+                id: Date.now().toString(),
+                type: 'nlp',
+                title: `日志归档：第3网格巡查记录自动化解析`,
+                status: '已结构化提取',
+                time: '刚刚'
+            });
+            saveState();
+            showToast('✅ 巡查日志 NLP 解析完成！');
+        };
+
+        /**
+         * 2. 隐患智能识别与分级 Agent
+         */
+        function renderHazardModule(container) {
+            container.innerHTML = `
+                <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-800 dark:text-gray-100">安全隐患多维智能评级与自动派单</h3>
+                    
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-[11px] text-gray-400 mb-1">巡查隐患类型</label>
+                            <select id="haz-type" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">
+                                <option>消防安全类 (堵塞通道/电瓶车上楼)</option>
+                                <option>设施设备类 (井盖破损/电梯异响)</option>
+                                <option>环境卫生类 (垃圾积存/违法私搭)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-400 mb-1">具体隐患描述与点位</label>
+                            <input type="text" id="haz-desc" value="丰台科技园人才公寓B栋负一层配电房外漏水" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700">
+                        </div>
+                    </div>
+
+                    <button onclick="runHazardAgent()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition">
+                        <i class="fa-solid fa-shield-halved mr-1"></i> 执行 Agent 风险评级与智能派单
+                    </button>
+                </div>
+            `;
+        }
+
+        window.runHazardAgent = function() {
+            const desc = document.getElementById('haz-desc').value;
+            state.records.unshift({
+                id: Date.now().toString(),
+                type: 'hazard',
+                title: `隐患识别：${desc}`,
+                status: '高风险 (已自动联动派单)',
+                time: '刚刚'
+            });
+            saveState();
+            showToast('🚨 隐患评级完成，已自动指派至对应处置责任人！');
+        };
+
+        /**
+         * 3. 高频问题趋势预测 Agent
+         */
+        function renderTrendModule(container) {
+            container.innerHTML = `
+                <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-800 dark:text-gray-100">网格巡查高频问题热力与趋势预测 Agent</h3>
+                    <p class="text-[11px] text-gray-400">基于历史巡查日志进行时空关联分析，提前预测易发隐患区域。</p>
+                    
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl space-y-2 text-xs">
+                        <div class="flex justify-between"><span>本周巡查日志总条数：</span><span class="font-bold">1,420 条</span></div>
+                        <div class="flex justify-between"><span>发现并闭环隐患数：</span><span class="font-bold text-blue-600">86 项 (闭环率 98%)</span></div>
+                        <div class="flex justify-between"><span>下周高发风险预测：</span><span class="font-bold text-amber-500">降雨后地下车库渗水与绿化树枝遮挡</span></div>
+                    </div>
+
+                    <button onclick="runTrendAnalysis()" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition">
+                        生成下周网格巡查重点防控建议
+                    </button>
+                </div>
+            `;
+        }
+
+        window.runTrendAnalysis = function() {
+            showToast('📈 趋势预测完成，已向各网格长推送防控提示！');
+        };
+
+        /**
+         * 4. 巡查总结 AI 生成模块
+         */
+        function renderReportGenModule(container) {
+            container.innerHTML = `
+                <div class="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-100 dark:border-gray-800 flex flex-col h-[340px]">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+                        <span class="text-xs font-bold text-gray-800 dark:text-gray-100">巡查周报 / 月报 AI 总结 Agent</span>
+                        <span class="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 rounded font-bold">自动生成</span>
+                    </div>
+
+                    <div id="chat-stream" class="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+                        ${state.chatMessages.map(msg => msg.sender === 'agent' ? `
+                            <div class="flex items-start gap-2">
+                                <div class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 flex items-center justify-center text-[10px] shrink-0 font-bold">AI</div>
+                                <div class="bg-gray-100 dark:bg-gray-800 p-2.5 rounded-xl rounded-tl-none text-gray-700 dark:text-gray-200 max-w-[85%] leading-relaxed">${msg.text}</div>
+                            </div>
+                        ` : `
+                            <div class="flex items-start gap-2 justify-end">
+                                <div class="bg-blue-600 text-white p-2.5 rounded-xl rounded-tr-none max-w-[85%] leading-relaxed">${msg.text}</div>
+                                <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] shrink-0 font-bold">我</div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="pt-2 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+                        <input type="text" id="qa-input" placeholder="输入生成指令，如：生成本周巡查总结..." class="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                        <button onclick="sendQAMessage()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition">生成</button>
+                    </div>
+                </div>
+            `;
+            const stream = document.getElementById('chat-stream');
+            if (stream) stream.scrollTop = stream.scrollHeight;
+        }
+
+        window.sendQAMessage = function() {
+            const input = document.getElementById('qa-input');
+            const txt = input.value.trim();
+            if (!txt) return;
+
+            state.chatMessages.push({ sender: 'user', text: txt });
+            input.value = '';
+            renderMainContent();
+
+            setTimeout(() => {
+                const reply = `【网格巡查周报总结报告】\n本周全集团共开展网格巡查 1420 次，通过 AI Agent 自动结构化解析发现并整改安全隐患 86 项。重点整治消防通道堆物 34 处、设施故障 22 处。隐患平均闭环处置时间由往常的 24 小时缩短至 3.5 小时，整体运行高效平稳。`;
+                state.chatMessages.push({ sender: 'agent', text: reply });
+                renderMainContent();
+            }, 600);
+        };
+
+        /**
+         * 2. 业务台账视图
+         */
+        function renderRecordsView(container) {
+            container.innerHTML = `
+                <div class="flex justify-between items-center mb-1">
+                    <h2 class="text-sm font-bold text-gray-800 dark:text-gray-100">网格巡查分析处理台账</h2>
+                    <span class="text-xs text-gray-400">共 ${state.records.length} 条记录</span>
+                </div>
+
+                <div class="space-y-2.5">
+                    ${state.records.map(r => `
+                        <div class="bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-start justify-between gap-2">
+                            <div>
+                                <h4 class="text-xs font-bold text-gray-800 dark:text-gray-100">${escapeHtml(r.title)}</h4>
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <span class="px-2 py-0.5 rounded text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 font-medium">${r.status}</span>
+                                    <span class="text-[10px] text-gray-400">${r.time}</span>
+                                </div>
+                            </div>
+                            <button onclick="deleteRecord('${r.id}')" class="text-gray-400 hover:text-red-500 text-xs p-1">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        window.deleteRecord = function(id) {
+            state.records = state.records.filter(r => r.id !== id);
+            saveState();
+            renderMainContent();
+            showToast('记录已删除');
+        };
+
+        /**
+         * 3. 效能看板视图
+         */
+        function renderStatsView(container) {
+            container.innerHTML = `
+                <h2 class="text-sm font-bold text-gray-800 dark:text-gray-100">网格巡查数字化转型与效能统计</h2>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 text-center">
+                        <div class="text-xs text-gray-400">日志分析提效</div>
+                        <div class="text-xl font-black text-blue-500 mt-1">85%</div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 text-center">
+                        <div class="text-xs text-gray-400">隐患闭环周期缩短</div>
+                        <div class="text-xl font-black text-blue-500 mt-1">60%</div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                    <h3 class="text-xs font-bold text-gray-500 mb-3">巡查问题分类占比</h3>
+                    <div class="h-44 flex items-center justify-center relative">
+                        <canvas id="chart-grid"></canvas>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                const ctx = document.getElementById('chart-grid').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['消防安全', '设施设备', '环境卫生', '其他日常'],
+                        datasets: [{
+                            data: [45, 30, 15, 10],
+                            backgroundColor: ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }
+                    }
+                });
+            }, 50);
+        }
+
+        // 智能报告弹框
+        window.openReportModal = function() {
+            document.getElementById('report-modal').classList.remove('hidden');
+        };
+        window.closeReportModal = function() {
+            document.getElementById('report-modal').classList.add('hidden');
+        };
+        window.copyReport = function() {
+            const name = document.getElementById('rep-name').value;
+            const pain = document.getElementById('rep-pain').value;
+            const tech = document.getElementById('rep-tech').value;
+            const result = document.getElementById('rep-result').value;
+
+            const text = `【创新大赛申报项目：一等奖路演材料】\n\n项目名称：${name}\n申报赛道：网格巡查记录分析赛道\n\n一、核心痛点：\n${pain}\n\n二、AI Agent 实现路径：\n${tech}\n\n三、量化提效减负成果：\n${result}`;
+
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('📋 一等奖申报材料已成功复制！');
+                closeReportModal();
+            } catch (err) {
+                showToast('复制失败');
+            }
+            document.body.removeChild(textArea);
+        };
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'pointer-events-none', '-translate-y-2');
+            }, 2000);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>
